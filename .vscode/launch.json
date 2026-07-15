@@ -1,0 +1,21 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Flutter Android - Dev",
+      "type": "dart",
+      "request": "launch",
+      "program": "lib/main.dart",
+      "templateFor": "lib/main.dart",
+      "flutterMode": "debug",
+      "toolArgs": [
+        "--dart-define",
+        "GOOGLE_WEB_CLIENT_ID=688021661176-ddni3a1g9hb25a5gljrri97asii870r5.apps.googleusercontent.com",
+        "--dart-define",
+        "API_BASE_URL=http://10.0.2.2:8080/poc/personal-finances/v1",
+        "--dart-define",
+        "CALLER_NAME=personal-finances-mobile"
+      ]
+    }
+  ]
+}

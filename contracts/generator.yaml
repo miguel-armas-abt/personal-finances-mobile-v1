@@ -1,0 +1,3 @@
+pubName: finances_api
+serializationLibrary: json_serializable
+hideGenerationTimestamp: true
