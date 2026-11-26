@@ -21,30 +21,69 @@ void main() {
   testWidgets('given an expense when edit is selected then edit form opens', (
     tester,
   ) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
-          expenseRepositoryProvider.overrideWithValue(_FakeExpenseRepository()),
-        ],
-        child: const PersonalFinancesApp(),
-      ),
-    );
-
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
-    await tester.pump();
+    await _openApp(tester, _FakeExpenseRepository());
 
     expect(find.text('PLIN'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('Editar'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text('PLIN'));
+    await tester.pumpAndSettle();
+    expect(find.text('Detalle del gasto'), findsOneWidget);
+
+    await tester.tap(find.text('Editar gasto'));
+    await tester.pumpAndSettle();
 
     expect(find.text('Editar gasto'), findsOneWidget);
     expect(find.widgetWithText(TextFormField, '280.00'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'given a delete request when cancelled or confirmed then only confirmation submits',
+    (tester) async {
+      final repository = _FakeExpenseRepository();
+      await _openApp(tester, repository);
+      await tester.tap(find.text('PLIN'));
+      await tester.pumpAndSettle();
+
+      final delete = find.widgetWithText(FilledButton, 'Eliminar gasto');
+      await tester.tap(delete);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
+      expect(repository.deletedIds, isEmpty);
+      expect(find.text('Detalle del gasto'), findsOneWidget);
+
+      await tester.tap(delete);
+      await tester.pumpAndSettle();
+      final dialog = find.byType(AlertDialog);
+      await tester.tap(find.descendant(of: dialog, matching: delete));
+      await tester.pumpAndSettle();
+
+      expect(repository.deletedIds, ['expense-id']);
+      expect(find.text('Aún no tienes gastos'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+}
+
+Future<void> _openApp(
+  WidgetTester tester,
+  _FakeExpenseRepository repository,
+) async {
+  tester.view.devicePixelRatio = 1;
+  tester.view.physicalSize = const Size(390, 844);
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        authRepositoryProvider.overrideWithValue(_FakeAuthRepository()),
+        expenseRepositoryProvider.overrideWithValue(repository),
+      ],
+      child: const PersonalFinancesApp(),
+    ),
+  );
+  await tester.pumpAndSettle();
 }
 
 class _FakeAuthRepository implements AuthRepository {
@@ -52,6 +91,9 @@ class _FakeAuthRepository implements AuthRepository {
   Future<String> requestGmailAccessToken() async {
     return 'gmail-token';
   }
+
+  @override
+  Future<String?> requestGmailAccessTokenIfAuthorized() async => null;
 
   @override
   Future<UserSession?> restoreSession() async {
@@ -80,20 +122,24 @@ class _FakeAuthRepository implements AuthRepository {
 }
 
 class _FakeExpenseRepository implements ExpenseRepository {
+  final deletedIds = <String>[];
+
   @override
   Future<String> create(ExpenseWriteRequest request) async {
     return 'expense-id';
   }
 
   @override
-  Future<void> delete(String expenseId) async {}
+  Future<void> delete(String expenseId) async {
+    deletedIds.add(expenseId);
+  }
 
   @override
   Future<ExpensePageResult> search({
     required ExpenseSearchCriteria criteria,
     String? encodedCursor,
   }) async {
-    return ExpensePageResult(expenses: [_expense()]);
+    return ExpensePageResult(expenses: deletedIds.isEmpty ? [_expense()] : []);
   }
 
   @override
@@ -117,6 +163,5 @@ Expense _expense() {
     source: 'BCP_DEBIT_CARD',
     recipient: 'PLIN',
     category: 'Transferencias',
-    comments: 'Pago',
   );
 }

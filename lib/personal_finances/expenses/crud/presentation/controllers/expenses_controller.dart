@@ -30,6 +30,9 @@ class ExpensesController extends Notifier<ExpensesState> {
     final nextCriteria = criteria ?? state.criteria;
     state = state.copyWith(
       criteria: nextCriteria,
+      expenses: criteria == null ? null : const [],
+      omittedCount: criteria == null ? null : 0,
+      clearLoadError: true,
       isLoading: true,
       clearMessage: true,
       clearCursor: true,
@@ -40,12 +43,13 @@ class ExpensesController extends Notifier<ExpensesState> {
       if (!ref.mounted || generation != _searchGeneration) return;
       state = state.copyWith(
         expenses: page.expenses,
+        omittedCount: page.omittedCount,
         nextCursor: page.nextCursor,
         isLoading: false,
       );
     } on AppFailure catch (failure) {
       if (!ref.mounted || generation != _searchGeneration) return;
-      state = state.copyWith(isLoading: false, message: failure.message);
+      state = state.copyWith(isLoading: false, loadError: failure.message);
     }
   }
 
@@ -67,6 +71,7 @@ class ExpensesController extends Notifier<ExpensesState> {
       };
       state = state.copyWith(
         expenses: List.unmodifiable(byId.values),
+        omittedCount: state.omittedCount + page.omittedCount,
         nextCursor: page.nextCursor,
         clearCursor: page.nextCursor == null || page.nextCursor == cursor,
         isLoadingMore: false,
@@ -86,9 +91,8 @@ class ExpensesController extends Notifier<ExpensesState> {
   }) =>
       _mutate(() => _repository.update(expenseId: expenseId, request: request));
 
-  Future<void> delete(String expenseId) async {
-    await _mutate(() => _repository.delete(expenseId));
-  }
+  Future<bool> delete(String expenseId) =>
+      _mutate(() => _repository.delete(expenseId));
 
   Future<bool> _mutate(Future<void> Function() action) async {
     if (_mutating || state.isSyncing) return false;

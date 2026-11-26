@@ -13,8 +13,9 @@ class PersonalFinancesApp extends ConsumerWidget {
     return MaterialApp.router(
       title: 'Finanzas Personales',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.light(),
+      theme: AppTheme.dark(),
       darkTheme: AppTheme.dark(),
+      themeMode: ThemeMode.dark,
       routerConfig: router,
     );
   }

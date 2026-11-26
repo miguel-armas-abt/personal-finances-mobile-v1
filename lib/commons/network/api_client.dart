@@ -1,12 +1,12 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
+import 'package:personal_finances_mobile_v1/commons/config/rest_log_config.dart';
+import 'package:personal_finances_mobile_v1/commons/logging/app_logger.dart';
 import 'package:personal_finances_mobile_v1/commons/config/app_config.dart';
 import 'package:personal_finances_mobile_v1/commons/errors/app_failure.dart';
 import 'package:personal_finances_mobile_v1/commons/errors/failure_mapper.dart';
 import 'package:personal_finances_mobile_v1/commons/persistence/secure_token_storage.dart';
 import 'package:personal_finances_mobile_v1/commons/utils/trace_parent.dart';
 import 'package:personal_finances_mobile_v1/commons/network/rest_log_interceptor.dart';
-import 'dart:developer' as developer;
 
 class ApiTransport {
   ApiTransport(AppConfig config, this._tokens)
@@ -21,9 +21,9 @@ class ApiTransport {
       ) {
     dio.interceptors.add(
       RestLogInterceptor(
-        enabled: kDebugMode,
+        config: RestLogConfig.fromEnvironment(),
         traceHeaderName: 'trace-parent',
-        write: (event) => developer.log(event, name: 'rest'),
+        write: AppLogger.rest,
       ),
     );
   }

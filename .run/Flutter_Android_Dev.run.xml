@@ -1,7 +1,0 @@
-<component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="Flutter Android - Dev" type="FlutterRunConfigurationType" factoryName="Flutter">
-    <option name="filePath" value="$PROJECT_DIR$/lib/main.dart" />
-    <option name="additionalArgs" value="--dart-define=GOOGLE_WEB_CLIENT_ID=688021661176-206to1qltkj29c5i371p9qghjlndt0al.apps.googleusercontent.com --dart-define=API_BASE_URL=http://10.0.2.2:8080/poc/personal-finances/v1 --dart-define=CALLER_NAME=personal-finances-mobile" />
-    <method v="2" />
-  </configuration>
-</component>

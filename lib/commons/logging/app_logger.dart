@@ -12,6 +12,14 @@ abstract final class AppLogger {
     _write(message, name: name, level: 800);
   }
 
+  static void rest(String message) {
+    if (kReleaseMode) {
+      debugPrint('[rest] $message');
+      return;
+    }
+    _write(message, name: 'rest', level: 800, enabled: true);
+  }
+
   static void warning(
     String message, {
     String name = 'app',
@@ -46,10 +54,11 @@ abstract final class AppLogger {
     String message, {
     required String name,
     required int level,
+    bool enabled = _enabled,
     Object? error,
     StackTrace? stackTrace,
   }) {
-    if (!_enabled) {
+    if (!enabled) {
       return;
     }
 

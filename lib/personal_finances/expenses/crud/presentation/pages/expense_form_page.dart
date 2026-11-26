@@ -1,7 +1,7 @@
 import 'package:personal_finances_mobile_v1/commons/utils/decimal_amount.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
+import 'package:personal_finances_mobile_v1/commons/widgets/design_widgets.dart';
 import 'package:intl/intl.dart';
 import 'package:personal_finances_mobile_v1/personal_finances/auth/session/presentation/controllers/auth_controller.dart';
 import 'package:personal_finances_mobile_v1/commons/logging/app_logger.dart';
@@ -27,16 +27,19 @@ class _ExpenseFormPageState extends ConsumerState<ExpenseFormPage> {
   late final TextEditingController _categoryController;
   late final TextEditingController _commentsController;
   late DateTime _date;
+  late final DateTime _initialDate;
   late CurrencyCode _currency;
   bool _isSubmitting = false;
 
   bool get _isEditing => widget.expense != null;
+  bool get _currencyNeedsSelection => !_currency.isKnown;
 
   @override
   void initState() {
     super.initState();
     final expense = widget.expense;
-    _date = expense?.date ?? DateTime.now();
+    _initialDate = expense?.date.toLocal() ?? DateTime.now();
+    _date = _initialDate;
     _currency = expense?.money.currency ?? CurrencyCode.pen;
     _amountController = TextEditingController(
       text: expense == null ? '' : formatMinorUnits(expense.money.amount),
@@ -63,105 +66,135 @@ class _ExpenseFormPageState extends ConsumerState<ExpenseFormPage> {
 
   @override
   Widget build(BuildContext context) {
-    final dateFormat = DateFormat('dd/MM/yyyy HH:mm', 'es_PE');
-
-    return Scaffold(
-      appBar: AppBar(title: Text(_isEditing ? 'Editar gasto' : 'Nuevo gasto')),
-      body: SafeArea(
+    final dateFormat = DateFormat('d MMM yyyy · HH:mm', 'es_PE');
+    return PopScope<bool>(
+      canPop: !_isSubmitting && !_hasChanges,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop || _isSubmitting) return;
+        final discard = await confirmDesignAction(
+          context,
+          title: 'Descartar cambios',
+          message: 'Se perderán los datos que aún no guardaste.',
+          action: 'Descartar cambios',
+        );
+        if (discard && context.mounted) Navigator.pop(context);
+      },
+      child: DesignPage(
+        title: _isEditing ? 'Editar gasto' : 'Nuevo gasto',
         child: Form(
           key: _formKey,
-          child: ListView(
-            padding: const EdgeInsets.all(16),
+          onChanged: () => setState(() {}),
+          child: Column(
             children: [
-              TextFormField(
-                controller: _amountController,
-                decoration: const InputDecoration(
-                  labelText: 'Monto',
-                  prefixIcon: Icon(Icons.payments_outlined),
-                ),
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                validator: _requiredPositiveAmount,
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<CurrencyCode>(
-                initialValue: _currency,
-                decoration: const InputDecoration(
-                  labelText: 'Moneda',
-                  prefixIcon: Icon(Icons.currency_exchange),
-                ),
-                items: CurrencyCode.values
-                    .map(
-                      (currency) => DropdownMenuItem(
-                        value: currency,
-                        child: Text(currency.code),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(24, 18, 24, 12),
+                  children: [
+                    Text(
+                      _currencyNeedsSelection
+                          ? 'Completa el monto y selecciona la moneda correcta'
+                          : _isEditing
+                          ? 'Actualiza los datos del movimiento'
+                          : 'Registra un movimiento manual',
+                    ),
+                    const SizedBox(height: 24),
+                    TextFormField(
+                      controller: _amountController,
+                      decoration: InputDecoration(
+                        labelText: 'Monto',
+                        hintText: _currencyNeedsSelection
+                            ? '0.00'
+                            : '${_currency.symbol} 0.00',
                       ),
-                    )
-                    .toList(growable: false),
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() => _currency = value);
-                  }
-                },
-              ),
-              const SizedBox(height: 12),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.event),
-                title: const Text('Fecha'),
-                subtitle: Text(dateFormat.format(_date)),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: _pickDate,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _sourceController,
-                enabled: !_isEditing,
-                decoration: const InputDecoration(
-                  labelText: 'Origen',
-                  prefixIcon: Icon(Icons.source_outlined),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      validator: _requiredPositiveAmount,
+                    ),
+                    const SizedBox(height: 11),
+                    DropdownButtonFormField<CurrencyCode>(
+                      initialValue: _currency,
+                      decoration: InputDecoration(
+                        labelText: 'Moneda',
+                        helperText: _currencyNeedsSelection
+                            ? 'No se pudo inferir. Selecciona PEN o USD.'
+                            : null,
+                      ),
+                      items: [
+                        for (final currency in CurrencyCode.values)
+                          DropdownMenuItem(
+                            value: currency,
+                            child: Text(
+                              currency.isKnown
+                                  ? currency.code
+                                  : 'UNKNOWN · sin definir',
+                            ),
+                          ),
+                      ],
+                      validator: (value) => value == null || !value.isKnown
+                          ? 'Selecciona PEN o USD para continuar.'
+                          : null,
+                      onChanged: (value) {
+                        if (value != null) setState(() => _currency = value);
+                      },
+                    ),
+                    const SizedBox(height: 11),
+                    Card(
+                      child: ListTile(
+                        title: const Text('Fecha y hora'),
+                        subtitle: Text(dateFormat.format(_date)),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: _pickDate,
+                      ),
+                    ),
+                    if (!_isEditing) ...[
+                      const SizedBox(height: 11),
+                      TextFormField(
+                        controller: _sourceController,
+                        decoration: const InputDecoration(labelText: 'Origen'),
+                        validator: _requiredText,
+                      ),
+                    ],
+                    const SizedBox(height: 11),
+                    TextFormField(
+                      controller: _recipientController,
+                      decoration: const InputDecoration(
+                        labelText: 'Destinatario',
+                        hintText: 'Ej. Mercado Central',
+                      ),
+                    ),
+                    const SizedBox(height: 11),
+                    TextFormField(
+                      controller: _categoryController,
+                      decoration: const InputDecoration(
+                        labelText: 'Categoría',
+                        hintText: 'Ej. Alimentación',
+                      ),
+                      validator: _isEditing ? _requiredText : null,
+                    ),
+                    const SizedBox(height: 11),
+                    TextFormField(
+                      controller: _commentsController,
+                      decoration: InputDecoration(
+                        labelText: 'Comentario',
+                        hintText: _isEditing ? null : 'Opcional',
+                      ),
+                      maxLines: 3,
+                      minLines: 1,
+                      validator: _isEditing ? _requiredText : null,
+                    ),
+                  ],
                 ),
-                validator: _requiredText,
               ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _recipientController,
-                decoration: const InputDecoration(
-                  labelText: 'Destinatario',
-                  prefixIcon: Icon(Icons.storefront_outlined),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: _isSubmitting ? null : _submit,
+                    child: Text(_isSubmitting ? 'Guardando…' : 'Guardar'),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _categoryController,
-                decoration: const InputDecoration(
-                  labelText: 'Categoría',
-                  prefixIcon: Icon(Icons.category_outlined),
-                ),
-                validator: _isEditing ? _requiredText : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _commentsController,
-                decoration: const InputDecoration(
-                  labelText: 'Comentario',
-                  prefixIcon: Icon(Icons.notes_outlined),
-                ),
-                minLines: 2,
-                maxLines: 3,
-                validator: _isEditing ? _requiredText : null,
-              ),
-              const SizedBox(height: 24),
-              FilledButton.icon(
-                onPressed: _isSubmitting ? null : _submit,
-                icon: _isSubmitting
-                    ? const SizedBox.square(
-                        dimension: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.save),
-                label: const Text('Guardar'),
               ),
             ],
           ),
@@ -170,12 +203,26 @@ class _ExpenseFormPageState extends ConsumerState<ExpenseFormPage> {
     );
   }
 
+  bool get _hasChanges {
+    final expense = widget.expense;
+    return _amountController.text !=
+            (expense == null ? '' : formatMinorUnits(expense.money.amount)) ||
+        _sourceController.text != (expense?.source ?? 'MANUAL') ||
+        _recipientController.text != (expense?.recipient ?? '') ||
+        _categoryController.text != (expense?.category ?? '') ||
+        _commentsController.text != (expense?.comments ?? '') ||
+        _currency != (expense?.money.currency ?? CurrencyCode.pen) ||
+        _date != _initialDate;
+  }
+
   Future<void> _pickDate() async {
+    final firstDate = DateTime(2020);
+    final lastDate = DateTime.now().add(const Duration(days: 365));
     final pickedDate = await showDatePicker(
       context: context,
       initialDate: _date,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
+      firstDate: _date.isBefore(firstDate) ? _date : firstDate,
+      lastDate: _date.isAfter(lastDate) ? _date : lastDate,
     );
     if (pickedDate == null || !mounted) {
       return;
@@ -184,7 +231,7 @@ class _ExpenseFormPageState extends ConsumerState<ExpenseFormPage> {
       context: context,
       initialTime: TimeOfDay.fromDateTime(_date),
     );
-    if (pickedTime == null) {
+    if (pickedTime == null || !mounted) {
       return;
     }
     setState(() {
@@ -230,7 +277,7 @@ class _ExpenseFormPageState extends ConsumerState<ExpenseFormPage> {
         return;
       }
       if (saved) {
-        context.pop();
+        Navigator.pop(context, true);
         return;
       }
 

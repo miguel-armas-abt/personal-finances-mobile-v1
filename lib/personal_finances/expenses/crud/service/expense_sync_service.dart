@@ -15,4 +15,13 @@ class ExpenseSyncService {
     if (!isActive()) throw const CancelledFailure();
     return _expenses.sync(token);
   }
+
+  Future<List<String>?> syncIfGmailAuthorized({
+    required bool Function() isActive,
+  }) async {
+    final token = await _auth.requestGmailAccessTokenIfAuthorized();
+    if (token == null || token.isEmpty) return null;
+    if (!isActive()) throw const CancelledFailure();
+    return _expenses.sync(token);
+  }
 }

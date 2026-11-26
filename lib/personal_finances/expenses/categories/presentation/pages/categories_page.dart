@@ -1,8 +1,10 @@
-import 'package:personal_finances_mobile_v1/commons/utils/decimal_amount.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:personal_finances_mobile_v1/commons/errors/app_failure.dart';
+import 'package:personal_finances_mobile_v1/commons/theme/app_theme.dart';
+import 'package:personal_finances_mobile_v1/commons/utils/decimal_amount.dart';
+import 'package:personal_finances_mobile_v1/commons/widgets/design_widgets.dart';
 import 'package:personal_finances_mobile_v1/personal_finances/expenses/categories/model/expense_category.dart';
 import 'package:personal_finances_mobile_v1/personal_finances/expenses/categories/presentation/controllers/categories_controller.dart';
 import 'package:personal_finances_mobile_v1/personal_finances/expenses/money.dart';
@@ -12,468 +14,527 @@ class CategoriesPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final settingsValue = ref.watch(categoriesControllerProvider);
-
-    return settingsValue.when(
+    final settings = ref.watch(categoriesControllerProvider);
+    return settings.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, stackTrace) => _CategoryError(
-        message: error is AppFailure
-            ? error.message
-            : 'No se pudieron cargar las categorías.',
-        onRetry: () => ref.invalidate(categoriesControllerProvider),
+      error: (error, _) => ListView(
+        padding: const EdgeInsets.all(24),
+        children: [
+          DesignNotice(
+            title: 'No pudimos cargar tus categorías',
+            message: error is AppFailure
+                ? error.message
+                : 'Revisa tu conexión y vuelve a intentar.',
+            color: AppTheme.sand,
+            ink: AppTheme.amber,
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton(
+            onPressed: () => ref.invalidate(categoriesControllerProvider),
+            child: const Text('Reintentar'),
+          ),
+        ],
       ),
-      data: (settings) => _CategoryEditor(initialSettings: settings),
+      data: (value) => _CategoryEditor(initial: value),
     );
   }
 }
 
 class _CategoryEditor extends ConsumerStatefulWidget {
-  const _CategoryEditor({required this.initialSettings});
+  const _CategoryEditor({required this.initial});
 
-  final ExpenseCategorySettings initialSettings;
+  final ExpenseCategorySettings initial;
 
   @override
   ConsumerState<_CategoryEditor> createState() => _CategoryEditorState();
 }
 
 class _CategoryEditorState extends ConsumerState<_CategoryEditor> {
-  late ExpenseCategorySettings _settings;
+  late ExpenseCategorySettings _settings = widget.initial;
   bool _busy = false;
-  bool _overwriteExisting = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _settings = widget.initialSettings;
-  }
+  bool get _dirty => !identical(_settings, widget.initial);
 
   @override
   void didUpdateWidget(covariant _CategoryEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.initialSettings != widget.initialSettings) {
-      _settings = widget.initialSettings;
-    }
+    if (oldWidget.initial != widget.initial) _settings = widget.initial;
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 88),
-        itemCount: _settings.categories.length + 1,
-        separatorBuilder: (context, index) => const SizedBox(height: 8),
-        itemBuilder: (context, index) {
-          if (index == 0) {
-            return _CategoryActions(
-              currency: _settings.currency,
-              overwriteExisting: _overwriteExisting,
-              onCurrencyChanged: (currency) => setState(() {
-                _settings = ExpenseCategorySettings(
-                  currency: currency,
-                  categories: _settings.categories,
-                );
-              }),
-              onOverwriteChanged: (value) =>
-                  setState(() => _overwriteExisting = value),
-              onAssign: _busy ? null : _assignExisting,
-              onSave: _busy ? null : _save,
-            );
-          }
-          final category = _settings.categories[index - 1];
-          return _CategoryTile(
-            category: category,
-            currency: _settings.currency,
-            onEdit: () =>
-                _openCategoryDialog(category: category, index: index - 1),
-            onDelete: () => setState(() {
-              final categories = [..._settings.categories]..removeAt(index - 1);
-              _settings = ExpenseCategorySettings(
-                currency: _settings.currency,
-                categories: categories,
-              );
-            }),
-          );
-        },
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: null,
-        onPressed: _busy ? null : () => _openCategoryDialog(),
-        icon: const Icon(Icons.add),
-        label: const Text('Categoría'),
-      ),
-    );
-  }
+    final colors = Theme.of(context).colorScheme;
+    final categories = _settings.categories;
+    final exceeded = _dirty
+        ? null
+        : categories.where((category) => category.limit.isExceeded).firstOrNull;
 
-  Future<void> _save() async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    try {
-      await ref.read(categoriesControllerProvider.notifier).save(_settings);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Categor\u00edas guardadas.')),
-      );
-    } on AppFailure catch (failure) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(failure.message)));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _assignExisting() async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    try {
-      final updated = await ref
-          .read(categoriesControllerProvider.notifier)
-          .assignExisting(
-            from: DateTime.now().subtract(const Duration(days: 365)),
-            overwriteExistingCategories: _overwriteExisting,
-          );
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Gastos actualizados: $updated')));
-    } on AppFailure catch (failure) {
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(failure.message)));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _openCategoryDialog({
-    ExpenseCategory? category,
-    int? index,
-  }) async {
-    final result = await showDialog<ExpenseCategory>(
-      context: context,
-      builder: (context) => _CategoryDialog(category: category),
-    );
-    if (result == null) {
-      return;
-    }
-    setState(() {
-      final categories = [..._settings.categories];
-      if (index == null) {
-        categories.add(result);
-      } else {
-        categories[index] = result;
-      }
-      _settings = ExpenseCategorySettings(
-        currency: _settings.currency,
-        categories: categories,
-      );
-    });
-  }
-}
-
-class _CategoryActions extends StatelessWidget {
-  const _CategoryActions({
-    required this.currency,
-    required this.overwriteExisting,
-    required this.onCurrencyChanged,
-    required this.onOverwriteChanged,
-    required this.onAssign,
-    required this.onSave,
-  });
-
-  final CurrencyCode currency;
-  final bool overwriteExisting;
-  final ValueChanged<CurrencyCode> onCurrencyChanged;
-  final ValueChanged<bool> onOverwriteChanged;
-  final VoidCallback? onAssign;
-  final VoidCallback? onSave;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(24, 18, 24, 24),
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: DropdownButtonFormField<CurrencyCode>(
-                initialValue: currency,
-                decoration: const InputDecoration(
-                  labelText: 'Moneda de límites',
-                  prefixIcon: Icon(Icons.currency_exchange),
-                ),
-                items: CurrencyCode.values
-                    .map(
-                      (value) => DropdownMenuItem(
-                        value: value,
-                        child: Text(value.code),
-                      ),
-                    )
-                    .toList(growable: false),
-                onChanged: (value) {
-                  if (value != null) {
-                    onCurrencyChanged(value);
+        const Text('Límites y reglas para clasificar gastos'),
+        const SizedBox(height: 24),
+        DropdownButtonFormField<CurrencyCode>(
+          initialValue: _settings.currency,
+          decoration: const InputDecoration(labelText: 'Moneda de límites'),
+          items: [
+            for (final currency in CurrencyCode.values)
+              DropdownMenuItem(value: currency, child: Text(currency.code)),
+          ],
+          onChanged: _busy
+              ? null
+              : (currency) {
+                  if (currency == null || currency == _settings.currency) {
+                    return;
                   }
+                  setState(
+                    () => _settings = ExpenseCategorySettings(
+                      currency: currency,
+                      categories: categories,
+                    ),
+                  );
                 },
+        ),
+        const SizedBox(height: 16),
+        if (_dirty) ...[
+          DesignNotice(
+            title: 'Hay cambios pendientes',
+            message: _settings.currency == widget.initial.currency
+                ? 'Guarda para aplicar el conjunto de categorías.'
+                : 'Al guardar, los límites se interpretarán en ${_settings.currency.code}.',
+          ),
+          const SizedBox(height: 16),
+        ] else if (exceeded != null) ...[
+          DesignNotice(
+            title: 'Límite excedido · ${exceeded.name}',
+            message:
+                '${_amount(exceeded.limit.balance.abs())} por encima del límite',
+            color: colors.errorContainer,
+            ink: colors.onErrorContainer,
+          ),
+          const SizedBox(height: 16),
+        ],
+        if (categories.isEmpty) ...[
+          const DesignNotice(
+            title: 'Aún no tienes categorías',
+            message: 'Añade una categoría para organizar tus gastos.',
+          ),
+          const SizedBox(height: 10),
+        ],
+        for (final (index, category) in categories.indexed) ...[
+          _CategoryLimitCard(
+            category: category,
+            index: index,
+            currency: _settings.currency,
+            onTap: _busy ? null : () => _edit(index: index),
+          ),
+          const SizedBox(height: 9),
+        ],
+        const SizedBox(height: 17),
+        OverflowBar(
+          alignment: MainAxisAlignment.spaceBetween,
+          overflowSpacing: 8,
+          children: [
+            FilledButton.tonal(
+              style: FilledButton.styleFrom(
+                backgroundColor: colors.primaryContainer,
+                foregroundColor: colors.onPrimaryContainer,
               ),
+              onPressed: _busy ? null : () => _edit(),
+              child: const Text('+ Categoría'),
             ),
-            const SizedBox(width: 8),
-            FilledButton.icon(
-              onPressed: onSave,
-              icon: const Icon(Icons.save),
-              label: const Text('Guardar'),
+            FilledButton(
+              onPressed: _busy || !_dirty ? null : _save,
+              child: Text(_busy ? 'Procesando…' : 'Guardar cambios'),
             ),
           ],
         ),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Recalcular gastos categorizados'),
-          value: overwriteExisting,
-          onChanged: onOverwriteChanged,
-        ),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: OutlinedButton.icon(
-            onPressed: onAssign,
-            icon: const Icon(Icons.auto_fix_high),
-            label: const Text('Aplicar a gastos existentes'),
-          ),
+        const SizedBox(height: 12),
+        OutlinedButton(
+          onPressed: _busy || _dirty ? null : _confirmAssignment,
+          child: const Text('Aplicar reglas a gastos existentes'),
         ),
       ],
     );
   }
+
+  String _amount(int amount) => NumberFormat.currency(
+    locale: 'en_US',
+    symbol: '${_settings.currency.symbol} ',
+  ).format(amount / 100);
+
+  Future<void> _edit({int? index}) async {
+    final category = index == null ? null : _settings.categories[index];
+    final result =
+        await Navigator.push<({ExpenseCategory? category, bool remove})>(
+          context,
+          MaterialPageRoute(builder: (_) => _CategoryForm(category: category)),
+        );
+    if (result == null || !mounted) return;
+    final categories = [..._settings.categories];
+    if (result.remove && index != null) {
+      categories.removeAt(index);
+    } else if (result.category case final value?) {
+      if (index == null) {
+        categories.add(value);
+      } else {
+        categories[index] = value;
+      }
+    }
+    setState(
+      () => _settings = ExpenseCategorySettings(
+        currency: _settings.currency,
+        categories: categories,
+      ),
+    );
+  }
+
+  Future<void> _save() => _run(() async {
+    await ref.read(categoriesControllerProvider.notifier).save(_settings);
+    return 'Categorías guardadas.';
+  });
+
+  Future<void> _confirmAssignment() async {
+    final overwrite = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => const _AssignmentPage()),
+    );
+    if (overwrite == null || !mounted) return;
+    await _run(() async {
+      final updated = await ref
+          .read(categoriesControllerProvider.notifier)
+          .assignExisting(
+            from: DateTime.now().subtract(const Duration(days: 365)),
+            overwriteExistingCategories: overwrite,
+          );
+      return 'Gastos actualizados: $updated';
+    });
+  }
+
+  Future<void> _run(Future<String> Function() command) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      _notify(await command());
+    } on AppFailure catch (failure) {
+      _notify(failure.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _notify(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
 }
 
-class _CategoryTile extends StatelessWidget {
-  const _CategoryTile({
+class _CategoryLimitCard extends StatelessWidget {
+  const _CategoryLimitCard({
     required this.category,
+    required this.index,
     required this.currency,
-    required this.onEdit,
-    required this.onDelete,
+    required this.onTap,
   });
 
   final ExpenseCategory category;
+  final int index;
   final CurrencyCode currency;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
+  final VoidCallback? onTap;
+
+  String _amount(int amount) => NumberFormat.currency(
+    locale: 'en_US',
+    symbol: '${currency.symbol} ',
+  ).format(amount / 100);
 
   @override
   Widget build(BuildContext context) {
-    final format = NumberFormat.currency(
-      locale: 'es_PE',
-      symbol: '${currency.symbol} ',
-    );
+    final limit = category.limit.amount;
+    final remaining = category.limit.balance;
+    final spent = limit - remaining;
+    final progress = limit <= 0 ? 0.0 : (spent / limit).clamp(0.0, 1.0);
+    final colors = Theme.of(context).colorScheme;
+    final status = category.limit.isExceeded
+        ? 'Excedido por ${_amount(remaining.abs())}'
+        : 'Disponible ${_amount(remaining)}';
+
     return Card(
-      child: ListTile(
-        title: Text(category.name),
-        subtitle: Text(
-          category.recipientPatterns.isEmpty
-              ? 'Sin patrones'
-              : category.recipientPatterns
-                    .map((pattern) => '${pattern.code.code}: ${pattern.value}')
-                    .join(' · '),
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              format.format(category.limit.amount / 100),
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            PopupMenuButton<String>(
-              tooltip: 'Opciones',
-              onSelected: (value) {
-                if (value == 'edit') {
-                  onEdit();
-                }
-                if (value == 'delete') {
-                  onDelete();
-                }
-              },
-              itemBuilder: (context) => const [
-                PopupMenuItem(value: 'edit', child: Text('Editar')),
-                PopupMenuItem(value: 'delete', child: Text('Eliminar')),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CategoryDialog extends StatefulWidget {
-  const _CategoryDialog({this.category});
-
-  final ExpenseCategory? category;
-
-  @override
-  State<_CategoryDialog> createState() => _CategoryDialogState();
-}
-
-class _CategoryDialogState extends State<_CategoryDialog> {
-  final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _nameController;
-  late final TextEditingController _limitController;
-  late final TextEditingController _patternController;
-  late RecipientPatternCode _patternCode;
-
-  @override
-  void initState() {
-    super.initState();
-    final category = widget.category;
-    final firstPattern = category?.recipientPatterns.firstOrNull;
-    _nameController = TextEditingController(text: category?.name ?? '');
-    _limitController = TextEditingController(
-      text: category == null ? '' : formatMinorUnits(category.limit.amount),
-    );
-    _patternController = TextEditingController(text: firstPattern?.value ?? '');
-    _patternCode = firstPattern?.code ?? RecipientPatternCode.contains;
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _limitController.dispose();
-    _patternController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(
-        widget.category == null ? 'Nueva categoría' : 'Editar categoría',
-      ),
-      content: Form(
-        key: _formKey,
-        child: SingleChildScrollView(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(13, 12, 15, 13),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              TextFormField(
-                controller: _nameController,
-                decoration: const InputDecoration(labelText: 'Nombre'),
-                validator: _requiredText,
+              Row(
+                children: [
+                  DesignBadge(
+                    label: String.fromCharCodes(
+                      category.name.runes.take(2),
+                    ).toUpperCase(),
+                    index: index,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          category.name,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        Text(
+                          'Gastado ${_amount(spent)} de ${_amount(limit)}',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    status,
+                    textAlign: TextAlign.end,
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: category.limit.isExceeded
+                          ? colors.error
+                          : colors.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 12),
-              TextFormField(
-                controller: _limitController,
-                decoration: const InputDecoration(labelText: 'Límite'),
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                validator: _positiveAmount,
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<RecipientPatternCode>(
-                initialValue: _patternCode,
-                decoration: const InputDecoration(labelText: 'Patrón'),
-                items: RecipientPatternCode.values
-                    .map(
-                      (code) =>
-                          DropdownMenuItem(value: code, child: Text(code.code)),
-                    )
-                    .toList(growable: false),
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() => _patternCode = value);
-                  }
-                },
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _patternController,
-                decoration: const InputDecoration(
-                  labelText: 'Texto destinatario',
+              Semantics(
+                label:
+                    'L?mite de ${category.name}: ${_amount(spent)} gastados de ${_amount(limit)}',
+                child: LinearProgressIndicator(
+                  value: progress,
+                  minHeight: 7,
+                  borderRadius: BorderRadius.circular(8),
+                  color: category.limit.isExceeded
+                      ? colors.error
+                      : colors.primary,
+                  backgroundColor: colors.surfaceContainerHighest,
                 ),
               ),
             ],
           ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancelar'),
-        ),
-        FilledButton(onPressed: _submit, child: const Text('Guardar')),
-      ],
     );
-  }
-
-  void _submit() {
-    if (!(_formKey.currentState?.validate() ?? false)) {
-      return;
-    }
-    final patternText = _patternController.text.trim();
-    Navigator.of(context).pop(
-      ExpenseCategory(
-        name: _nameController.text.trim(),
-        limit: CategoryLimit(
-          amount: parseMinorUnits(_limitController.text.replaceAll(',', '.')),
-          isExceeded: widget.category?.limit.isExceeded ?? false,
-          balance: widget.category?.limit.balance ?? 0,
-        ),
-        recipientPatterns: patternText.isEmpty
-            ? const []
-            : [RecipientPattern(code: _patternCode, value: patternText)],
-      ),
-    );
-  }
-
-  String? _requiredText(String? value) {
-    if (value == null || value.trim().isEmpty) {
-      return 'Campo requerido.';
-    }
-    return null;
-  }
-
-  String? _positiveAmount(String? value) {
-    final amount = tryParseMinorUnits((value ?? '').replaceAll(',', '.'));
-    if (amount == null || amount <= 0) {
-      return 'Ingresa un monto mayor a cero.';
-    }
-    return null;
   }
 }
 
-class _CategoryError extends StatelessWidget {
-  const _CategoryError({required this.message, required this.onRetry});
+class _AssignmentPage extends StatefulWidget {
+  const _AssignmentPage();
 
-  final String message;
-  final VoidCallback onRetry;
+  @override
+  State<_AssignmentPage> createState() => _AssignmentPageState();
+}
+
+class _AssignmentPageState extends State<_AssignmentPage> {
+  bool _overwrite = false;
+
+  @override
+  Widget build(BuildContext context) => DesignPage(
+    title: 'Aplicar reglas',
+    child: ListView(
+      padding: const EdgeInsets.fromLTRB(24, 18, 24, 24),
+      children: [
+        const Text('Revisa el alcance antes de ejecutar.'),
+        const SizedBox(height: 24),
+        const Card(
+          child: ListTile(
+            title: Text('Periodo'),
+            subtitle: Text('Últimos 365 días'),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          child: SwitchListTile(
+            title: const Text('Reemplazar categorías existentes'),
+            value: _overwrite,
+            onChanged: (value) => setState(() => _overwrite = value),
+          ),
+        ),
+        if (_overwrite) ...[
+          const SizedBox(height: 16),
+          const DesignNotice(
+            title: 'Se recalcularán categorías previas',
+            message: 'El cambio puede afectar gastos editados a mano.',
+            color: AppTheme.sand,
+            ink: AppTheme.amber,
+          ),
+        ],
+        const SizedBox(height: 24),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, _overwrite),
+          child: Text(
+            _overwrite ? 'Recalcular categorías' : 'Aplicar a gastos',
+          ),
+        ),
+        const SizedBox(height: 12),
+        OutlinedButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancelar'),
+        ),
+      ],
+    ),
+  );
+}
+
+class _CategoryForm extends StatefulWidget {
+  const _CategoryForm({this.category});
+
+  final ExpenseCategory? category;
+
+  @override
+  State<_CategoryForm> createState() => _CategoryFormState();
+}
+
+class _CategoryFormState extends State<_CategoryForm> {
+  final _form = GlobalKey<FormState>();
+  late final _name = TextEditingController(text: widget.category?.name);
+  late final _limit = TextEditingController(
+    text: widget.category == null
+        ? ''
+        : formatMinorUnits(widget.category!.limit.amount),
+  );
+  late final _recipient = TextEditingController(
+    text: widget.category?.recipientPatterns.firstOrNull?.value,
+  );
+  late RecipientPatternCode? _pattern =
+      widget.category?.recipientPatterns.firstOrNull?.code;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _limit.dispose();
+    _recipient.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+    final editing = widget.category != null;
+    final colors = Theme.of(context).colorScheme;
+    return DesignPage(
+      title: editing ? 'Editar categoría' : 'Nueva categoría',
+      child: Form(
+        key: _form,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(24, 18, 24, 24),
           children: [
-            Icon(
-              Icons.error_outline,
-              color: Theme.of(context).colorScheme.error,
+            Text(
+              editing
+                  ? 'El cambio quedará pendiente de guardar.'
+                  : 'Añade un límite y una regla opcional.',
             ),
-            const SizedBox(height: 12),
-            Text(message, textAlign: TextAlign.center),
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Reintentar'),
+            const SizedBox(height: 28),
+            TextFormField(
+              controller: _name,
+              decoration: const InputDecoration(
+                labelText: 'Nombre',
+                hintText: 'Ej. Ocio',
+              ),
+              validator: (value) =>
+                  (value ?? '').trim().isEmpty ? 'Campo requerido.' : null,
             ),
+            const SizedBox(height: 11),
+            TextFormField(
+              controller: _limit,
+              decoration: const InputDecoration(
+                labelText: 'Límite',
+                hintText: '0.00',
+              ),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              validator: (value) {
+                final amount = tryParseMinorUnits(
+                  (value ?? '').replaceAll(',', '.'),
+                );
+                return amount == null || amount <= 0
+                    ? 'Ingresa un monto mayor a cero.'
+                    : null;
+              },
+            ),
+            const SizedBox(height: 11),
+            DropdownButtonFormField<RecipientPatternCode>(
+              initialValue: _pattern,
+              hint: const Text('Sin patrón'),
+              decoration: const InputDecoration(labelText: 'Patrón'),
+              items: [
+                const DropdownMenuItem(child: Text('Sin patrón')),
+                for (final code in RecipientPatternCode.values)
+                  DropdownMenuItem(
+                    value: code,
+                    child: Text(_patternLabel(code)),
+                  ),
+              ],
+              onChanged: (value) => setState(() => _pattern = value),
+            ),
+            if (_pattern != null) ...[
+              const SizedBox(height: 11),
+              TextFormField(
+                controller: _recipient,
+                decoration: const InputDecoration(
+                  labelText: 'Texto del destinatario',
+                ),
+                validator: (value) =>
+                    (value ?? '').trim().isEmpty ? 'Campo requerido.' : null,
+              ),
+            ],
+            const SizedBox(height: 40),
+            FilledButton(
+              onPressed: _submit,
+              child: Text(editing ? 'Aplicar cambio' : 'Guardar'),
+            ),
+            if (editing) ...[
+              const SizedBox(height: 12),
+              FilledButton.tonal(
+                style: FilledButton.styleFrom(
+                  backgroundColor: colors.errorContainer,
+                  foregroundColor: colors.onErrorContainer,
+                ),
+                onPressed: () => Navigator.pop(context, (
+                  category: null as ExpenseCategory?,
+                  remove: true,
+                )),
+                child: const Text('Quitar del borrador'),
+              ),
+            ],
           ],
         ),
       ),
     );
   }
+
+  void _submit() {
+    if (!_form.currentState!.validate()) return;
+    final category = ExpenseCategory(
+      name: _name.text.trim(),
+      limit: CategoryLimit(
+        amount: parseMinorUnits(_limit.text.replaceAll(',', '.')),
+        isExceeded: false,
+        balance: 0,
+      ),
+      recipientPatterns: [
+        if (_pattern case final pattern?)
+          RecipientPattern(code: pattern, value: _recipient.text.trim()),
+        ...?widget.category?.recipientPatterns.skip(1),
+      ],
+    );
+    Navigator.pop(context, (category: category, remove: false));
+  }
 }
+
+String _patternLabel(RecipientPatternCode code) => switch (code) {
+  RecipientPatternCode.sameAs => 'Igual a',
+  RecipientPatternCode.startWith => 'Empieza con',
+  RecipientPatternCode.contains => 'Contiene',
+  RecipientPatternCode.endsWith => 'Termina con',
+};

@@ -63,6 +63,46 @@ void main() {
   );
 
   test(
+    'given a mixed page when decoded then valid expenses and the cursor are retained',
+    () async {
+      adapter.body = '''
+        {
+          "expenses": [
+            {
+              "id": "expense-a",
+              "date": {"utc": "2026-11-25T20:58:23Z", "formatted": "25 nov 2026"},
+              "detail": {"recipient": "Comercio de prueba", "source": "BCP_DEBIT_CARD"},
+              "currency": {"code": "PEN", "symbol": "S/"},
+              "amount": "3.89"
+            },
+            {"id": "expense-without-details"},
+            {
+              "id": "expense-unknown-currency",
+              "date": {"utc": "2026-11-25T20:58:23Z"},
+              "detail": {"source": "MANUAL"},
+              "currency": {"code": "UNKNOWN"},
+              "amount": "12.00"
+            }
+          ],
+          "nextCursor": "next-page"
+        }
+      ''';
+
+      final page = await repository.search(
+        criteria: const ExpenseSearchCriteria(),
+      );
+
+      expect(page.expenses.map((expense) => expense.id), [
+        'expense-a',
+        'expense-unknown-currency',
+      ]);
+      expect(page.expenses.first.money.amount, 389);
+      expect(page.expenses[1].money.currency.code, 'UNKNOWN');
+      expect(page.omittedCount, 1);
+      expect(page.nextCursor, 'next-page');
+    },
+  );
+  test(
     'given missing expense fields when decoded then the repository fails',
     () async {
       adapter.body = '{"expenses":[{"id":"one"}]}';

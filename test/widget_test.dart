@@ -21,7 +21,7 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.text('Finanzas Personales'), findsOneWidget);
+      expect(find.text('Personal Finances'), findsOneWidget);
       expect(find.text('Continuar con Google'), findsOneWidget);
     },
   );
@@ -32,6 +32,9 @@ class _FakeAuthRepository implements AuthRepository {
   Future<String> requestGmailAccessToken() async {
     return 'gmail-token';
   }
+
+  @override
+  Future<String?> requestGmailAccessTokenIfAuthorized() async => null;
 
   @override
   Future<UserSession?> restoreSession() async {

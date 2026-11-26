@@ -6,6 +6,7 @@ import 'package:personal_finances_mobile_v1/personal_finances/auth/session/prese
 import 'package:personal_finances_mobile_v1/personal_finances/auth/session/presentation/pages/login_page.dart';
 import 'package:personal_finances_mobile_v1/personal_finances/expenses/crud/model/expense.dart';
 import 'package:personal_finances_mobile_v1/personal_finances/expenses/crud/presentation/pages/expense_form_page.dart';
+import 'package:personal_finances_mobile_v1/personal_finances/expenses/crud/presentation/pages/analysis_page.dart';
 import 'package:personal_finances_mobile_v1/app/shell/home_page.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
@@ -49,6 +50,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               return ExpenseFormPage(expense: expense);
             },
           ),
+          GoRoute(
+            path: AppRoutes.analysisSegment,
+            builder: (context, state) => AnalysisPage(
+              initialMonth: state.extra is DateTime
+                  ? state.extra! as DateTime
+                  : DateTime.now(),
+            ),
+          ),
         ],
       ),
     ],
@@ -64,6 +73,8 @@ class AppRoutes {
   static const home = '/';
   static const newExpenseSegment = 'expenses/new';
   static const editExpenseSegment = 'expenses/edit';
+  static const analysisSegment = 'analysis';
   static const newExpense = '/expenses/new';
   static const editExpense = '/expenses/edit';
+  static const analysis = '/analysis';
 }

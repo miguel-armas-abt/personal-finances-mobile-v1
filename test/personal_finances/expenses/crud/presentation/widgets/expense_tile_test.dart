@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:personal_finances_mobile_v1/commons/theme/app_theme.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:personal_finances_mobile_v1/personal_finances/expenses/crud/model/expense.dart';
 import 'package:personal_finances_mobile_v1/personal_finances/expenses/money.dart';
@@ -10,31 +11,39 @@ void main() {
     await initializeDateFormatting('es_PE');
   });
 
-  testWidgets('given edit action when pressed then edit callback runs', (
+  test('given a comment when choosing a title then it takes priority', () {
+    expect(expenseTitle(_expense(comment: '  Pago  ')), 'Pago');
+    expect(expenseTitle(_expense(comment: '   ')), 'PLIN');
+  });
+  testWidgets('given an expense when its row is pressed then detail opens', (
     tester,
   ) async {
-    var editWasSelected = false;
+    var detailOpened = false;
 
     await tester.pumpWidget(
       MaterialApp(
+        theme: AppTheme.light(),
         home: Scaffold(
           body: ExpenseTile(
             expense: _expense(),
-            onEdit: () => editWasSelected = true,
-            onDelete: () {},
+            onOpen: () => detailOpened = true,
           ),
         ),
       ),
     );
 
-    await tester.tap(find.byTooltip('Editar'));
+    final title = tester.widget<Text>(find.text('PLIN'));
+    expect(title.style?.color, AppTheme.ink);
+    expect(find.text('−S/ 280.00'), findsOneWidget);
+
+    await tester.tap(find.text('PLIN'));
     await tester.pump();
 
-    expect(editWasSelected, isTrue);
+    expect(detailOpened, isTrue);
   });
 }
 
-Expense _expense() {
+Expense _expense({String? comment}) {
   return Expense(
     id: 'expense-id',
     date: DateTime(2026, 6, 30, 13, 44),
@@ -43,6 +52,6 @@ Expense _expense() {
     source: 'BCP_DEBIT_CARD',
     recipient: 'PLIN',
     category: 'Transferencias',
-    comments: 'Pago',
+    comments: comment,
   );
 }

@@ -8,4 +8,6 @@ abstract interface class AuthRepository {
   Future<void> signOut();
 
   Future<String> requestGmailAccessToken();
+
+  Future<String?> requestGmailAccessTokenIfAuthorized();
 }

@@ -123,4 +123,17 @@ class AuthRepositoryImpl implements AuthRepository {
       );
     }
   }
+
+  @override
+  Future<String?> requestGmailAccessTokenIfAuthorized() async {
+    try {
+      return await _identity.requestGmailAccessTokenIfAuthorized();
+    } on GoogleSignInException catch (error) {
+      AppLogger.warning(
+        'No se pudo renovar el acceso Gmail: ${error.code.name}',
+        name: 'auth',
+      );
+      return null;
+    }
+  }
 }

@@ -1,4 +1,4 @@
-# Finanzas Personales · Flutter
+﻿# Finanzas Personales · Flutter
 
 ## ▶️ Arranque local en Android
 
@@ -75,4 +75,19 @@ lib/personal_finances/expenses/categories/ Configuración y asignación de categ
 packages/finances_api/                    Cliente generado
 ```
 
-Cada subdominio agrupa su presentación, repositorios, modelos y mapeos. Los repositorios encapsulan el acceso a fuentes externas. El logger REST de depuración registra operación, estado, duración y trazabilidad.
+Cada subdominio agrupa su presentación, repositorios, modelos y mapeos. Los repositorios encapsulan el acceso a fuentes externas. El logger REST registra operación, estado, duración y trazabilidad.
+
+### Diagnóstico REST
+
+El logger REST siempre escribe un evento `rest.completed` en el canal `rest`, también en release. Incluye la URI saneada, cabeceras de solicitud y respuesta y el JSON disponible. Por defecto conserva el cuerpo completo, sin límites de tamaño, profundidad ni cantidad de elementos. Omite cuerpos binarios, multipart y flujos. El texto que no sea JSON se registra como texto.
+
+Configura las variables mediante `--dart-define` y recompila la app.
+
+- `APP_REST_LOG_MASK_HEADERS` selecciona cabeceras de solicitud y respuesta sin distinguir mayúsculas.
+- `APP_REST_LOG_MASK_BODY_FIELDS` selecciona rutas JSON de solicitud y respuesta. Usa puntos para objetos y `[*]` para elementos de listas, como `expenses[*].detail.recipient`.
+- `APP_REST_LOG_MAX_BODY_CHARS` limita opcionalmente la longitud serializada del cuerpo de solicitud y respuesta. Si no se define, o no es un entero positivo, no se trunca el cuerpo.
+
+Si omites una variable o la dejas vacía, su lista queda vacía. Define expresamente todos los campos sensibles que quieras ofuscar. Para texto seleccionado de más de seis caracteres se conservan los primeros y últimos tres, separados por `*****`. Los valores cortos, listas y objetos seleccionados se sustituyen por `*****`.
+
+
+

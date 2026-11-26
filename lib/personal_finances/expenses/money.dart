@@ -1,15 +1,16 @@
 enum CurrencyCode {
   pen('PEN', 'S/'),
-  usd('USD', r'$');
+  usd('USD', r'$'),
+  unknown('UNKNOWN', 'UNKNOWN');
 
   const CurrencyCode(this.code, this.symbol);
 
-  factory CurrencyCode.fromCode(String code) {
-    return CurrencyCode.values.firstWhere(
-      (value) => value.code == code,
-      orElse: () => throw const FormatException('Unsupported currency'),
-    );
-  }
+  factory CurrencyCode.fromCode(String? code) => CurrencyCode.values.firstWhere(
+    (value) => value.code == code?.trim().toUpperCase(),
+    orElse: () => CurrencyCode.unknown,
+  );
+
+  bool get isKnown => this != CurrencyCode.unknown;
 
   final String code;
   final String symbol;
